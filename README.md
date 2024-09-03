@@ -177,15 +177,6 @@ You can customize your simulations by adding more logic to your `runAIWorkflow` 
 - Introduce artificial delays to simulate processing time
 - Simulate error conditions to test error handling
 
-### Best Practices for Simulations
-
-1. Make your simulated responses as close to real responses as possible.
-2. Use environment variables or configuration files to easily switch between development and production endpoints.
-3. Include metadata in your simulated responses to clearly indicate they are simulations.
-4. Test both your simulated and real workflows regularly to ensure consistency.
-
-By setting up simulations, you can develop and test your AI-powered applications more efficiently, without constantly hitting production AI services.
-
 
 ## API Reference
 
