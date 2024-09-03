@@ -72,6 +72,68 @@ const devResponse = await tunerkitClient.chat.completions.create({
 console.log(devResponse.choices[0].message.content);
 ```
 
+### Using the Tool Decorator
+
+Tunerkit provides a `tool` decorator that you can use to easily integrate Tunerkit functionality into your existing methods. Here's an example of how to use it with a function that fetches the HTML content of a website:
+
+```typescript
+import { TunerkitClient } from 'tunerkit';
+import axios from 'axios';
+
+class WebTools {
+  private tunerkitClient: TunerkitClient<any>;
+
+  constructor(tunerkitApiKey: string) {
+    this.tunerkitClient = new TunerkitClient({
+      client: {}, // Empty object as we're not wrapping a specific client
+      tunerkitApiKey: tunerkitApiKey,
+    });
+  }
+
+  @tunerkitClient.tool()
+  async fetchWebContent(url: string): Promise<string> {
+    const response = await axios.get(url);
+    return response.data;
+  }
+}
+
+// Usage
+async function main() {
+  const webTools = new WebTools('your-tunerkit-api-key');
+  
+  try {
+    const html = await webTools.fetchWebContent('https://example.com', {
+      'Tunerkit-Session-Id': 'unique-fetch-session-id',
+      'Tunerkit-Session-Name': 'Web Content Fetch',
+    });
+    console.log('Fetched HTML:', html.substring(0, 100) + '...');
+  } catch (error) {
+    console.error('Error fetching web content:', error);
+  }
+}
+
+main();
+```
+
+In this example:
+
+1. We create a `WebTools` class with a `fetchWebContent` method decorated with `@tunerkitClient.tool()`.
+2. The `fetchWebContent` method uses axios to get the HTML content of a given URL.
+3. By using the decorator, Tunerkit will log and monitor this external API call.
+
+### Development Mode
+
+To use development mode, you can pass options to the tool decorator:
+
+```typescript
+@tunerkitClient.tool({ dev: true })
+async fetchWebContent(url: string): Promise<string> {
+  // ... method implementation ...
+}
+```
+
+In development mode, Tunerkit can simulate responses or interact with a test environment, allowing you to debug and refine your tools without making actual external API calls.
+
 ### Logging with Helicone
 
 Tunerkit integrates with Helicone for advanced logging and analytics. To use Helicone logging:
@@ -104,35 +166,22 @@ Here's an example of how your endpoint might look using Express.js with ES6 impo
 
 ```javascript
 import express from 'express';
+import { registerWorkflowCall } from 'tunerkit';
 
 const app = express();
 
 app.use(express.json());
 
 app.post('/ai-workflow', async (req, res) => {
-  const { dev, ...params } = req.body;
+  const { ...params } = req.body;
+
+  await registerWorkflowCall(req);
 
   // Your AI workflow logic here
-  const result = await runAIWorkflow(params, dev);
+  const result = await runAIWorkflow(params);
 
   res.json(result);
 });
-
-function runAIWorkflow(params, dev) {
-  if (dev) {
-    // Return simulated data for development
-    return {
-      result: "Simulated AI response",
-      metadata: {
-        simulated: true,
-        params: params
-      }
-    };
-  } else {
-    // Run the actual AI workflow
-    // ... your AI logic here ...
-  }
-}
 
 app.listen(3000, () => console.log('AI workflow server running on port 3000'));
 ```

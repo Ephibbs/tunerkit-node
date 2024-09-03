@@ -6,6 +6,11 @@ type TunerkitHeaders = {
   'Tunerkit-Record-Id'?: string;
 }
 
+type ToolOptions = {
+  dev?: boolean;
+  // Add any other options you want to support
+};
+
 export class TunerkitClient<T extends object> {
   private client: T;
   private tunerkitApiKey: string;
@@ -33,7 +38,7 @@ export class TunerkitClient<T extends object> {
     }) as any;
   }
 
-  private async logToTunerkit(params: any, response: any, headers: TunerkitHeaders) {
+  private async _logToTunerkit(params: any, response: any, headers: TunerkitHeaders) {
     try {
       await fetch('https://api.tunerkit.dev/logs', {
         method: 'POST',
@@ -49,7 +54,7 @@ export class TunerkitClient<T extends object> {
     }
   }
 
-  private async runDevFlow(params: any, headers: any, options: any): Promise<{ run_model: boolean; response: any }> {
+  private async _runDevFlow(params: any, headers: any, options: any): Promise<{ run_model: boolean; response: any }> {
     const tunerkitResponse = await fetch('https://api.tunerkit.dev/v1/dev/completions', {
         method: 'POST',
         headers: {
@@ -71,6 +76,42 @@ export class TunerkitClient<T extends object> {
     return response
   }
 
+  public tool(options?: ToolOptions) {
+    return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
+      const originalMethod = descriptor.value;
+      descriptor.value = async (...args: any[]) => {
+        const params = args[0] || {};
+        const headers: TunerkitHeaders = args[1] || {};
+        const toolOptions = { ...options, dev: options?.dev || false };
+
+        let response;
+        let devResponse: any = { run_model: true };
+
+        if (toolOptions.dev) {
+          devResponse = await this._runDevFlow(params, headers, toolOptions);
+          response = devResponse.response;
+        }
+
+        if (devResponse.run_model) {
+          response = await originalMethod.apply(this, args);
+          this._logToTunerkit(params, response, headers);
+        }
+
+        if (this.logger) {
+          this.logger.log({
+            params,
+            response,
+            headers,
+            meta: response.meta
+          });
+        }
+
+        return response;
+      };
+      return descriptor;
+    };
+  }
+
   private createProxyHandler(propPath: string): any {
     return new Proxy(() => {}, {
       get: (_, subProp) => this.createProxyHandler(`${propPath}.${String(subProp)}`),
@@ -84,13 +125,13 @@ export class TunerkitClient<T extends object> {
         };
 
         if (options?.dev) {
-            devResponse = await this.runDevFlow(params, headers, options);
+            devResponse = await this._runDevFlow(params, headers, options);
             response = devResponse.response;
         }
 
         if (devResponse.run_model) {
             response = await method.call(this.client, params);
-            this.logToTunerkit(params, response, headers);
+            this._logToTunerkit(params, response, headers);
         }
 
         if (this.logger) {
