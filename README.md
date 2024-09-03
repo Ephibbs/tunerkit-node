@@ -72,40 +72,37 @@ const devResponse = await tunerkitClient.chat.completions.create({
 console.log(devResponse.choices[0].message.content);
 ```
 
-### Using the Tool Decorator
+In development mode, Tunerkit can simulate responses or interact with a test environment, allowing you to debug and refine your tools without making actual external API calls.
 
-Tunerkit provides a `tool` decorator that you can use to easily integrate Tunerkit functionality into your existing methods. Here's an example of how to use it with a function that fetches the HTML content of a website:
+### Using the Tool Decorator and Session Management
+
+Tunerkit provides a `tool` decorator for integrating Tunerkit functionality into your existing functions, and a `setSession` method for managing session information. Here's an example demonstrating both features:
 
 ```typescript
 import { TunerkitClient } from 'tunerkit';
 import axios from 'axios';
 
-class WebTools {
-  private tunerkitClient: TunerkitClient<any>;
+const tunerkitClient = new TunerkitClient({
+  client: {}, // Empty object as we're not wrapping a specific client
+  tunerkitApiKey: 'your-tunerkit-api-key',
+});
 
-  constructor(tunerkitApiKey: string) {
-    this.tunerkitClient = new TunerkitClient({
-      client: {}, // Empty object as we're not wrapping a specific client
-      tunerkitApiKey: tunerkitApiKey,
-    });
-  }
-
-  @tunerkitClient.tool()
-  async fetchWebContent(url: string): Promise<string> {
-    const response = await axios.get(url);
-    return response.data;
-  }
+@tunerkitClient.tool()
+async function fetchWebContent(url: string): Promise<string> {
+  const response = await axios.get(url);
+  return response.data;
 }
 
 // Usage
 async function main() {
-  const webTools = new WebTools('your-tunerkit-api-key');
-  
+  // Set the session information
+  tunerkitClient.setSession({
+    sessionId: 'unique-fetch-session-id',
+    sessionName: 'Web Content Fetch',
+  });
+
   try {
-    const html = await webTools.fetchWebContent('https://example.com', {
-      'Tunerkit-Session-Id': 'unique-fetch-session-id',
-      'Tunerkit-Session-Name': 'Web Content Fetch',
-    });
+    const html = await fetchWebContent('https://example.com');
     console.log('Fetched HTML:', html.substring(0, 100) + '...');
   } catch (error) {
     console.error('Error fetching web content:', error);
@@ -117,9 +114,10 @@ main();
 
 In this example:
 
-1. We create a `WebTools` class with a `fetchWebContent` method decorated with `@tunerkitClient.tool()`.
-2. The `fetchWebContent` method uses axios to get the HTML content of a given URL.
-3. By using the decorator, Tunerkit will log and monitor this external API call.
+1. We create a `tunerkitClient` instance at the module level.
+2. The `fetchWebContent` function is decorated with `@tunerkitClient.tool()`.
+3. Before calling the decorated function, we use `tunerkitClient.setSession()` to set the session information.
+4. The decorated function no longer needs to receive session information as parameters.
 
 ### Development Mode
 
@@ -127,12 +125,27 @@ To use development mode, you can pass options to the tool decorator:
 
 ```typescript
 @tunerkitClient.tool({ dev: true })
-async fetchWebContent(url: string): Promise<string> {
-  // ... method implementation ...
+async function fetchWebContent(url: string): Promise<string> {
+  // ... function implementation ...
 }
 ```
 
 In development mode, Tunerkit can simulate responses or interact with a test environment, allowing you to debug and refine your tools without making actual external API calls.
+
+### Changing Sessions
+
+If you need to change the session during runtime, you can call `setSession` again:
+
+```typescript
+tunerkitClient.setSession({
+  sessionId: 'another-unique-id',
+  sessionName: 'Another Task',
+});
+
+// Subsequent calls to decorated functions will use this new session
+```
+
+This approach allows for more flexible session management across multiple function calls or different parts of your application.
 
 ### Logging with Helicone
 
