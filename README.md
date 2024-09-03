@@ -137,19 +137,17 @@ function runAIWorkflow(params, dev) {
 app.listen(3000, () => console.log('AI workflow server running on port 3000'));
 ```
 
-### 2. Configure Tunerkit
+### 2. Register Your Webhook
 
-In your Tunerkit configuration, you need to specify the URL of your hosted AI workflow. You can do this by setting the `TUNERKIT_WORKFLOW_URL` environment variable or passing it directly to the TunerkitClient constructor:
+To use simulations with Tunerkit, you need to register your AI workflow webhook in your dataset at app.tunerkit.dev. This allows Tunerkit to call your hosted endpoint for simulations. Here's how to set it up:
 
-```typescript
-import { TunerkitClient } from 'tunerkit';
+1. Log in to your Tunerkit account at app.tunerkit.dev
+2. Navigate to your dataset settings
+3. Find the "Webhooks" section
+4. Add a new webhook with the URL of your hosted AI workflow (e.g., 'http://your-server.com/ai-workflow')
+5. Save your changes
 
-const tunerkitClient = new TunerkitClient({
-  client: yourAIClient,
-  tunerkitApiKey: 'your-tunerkit-api-key',
-  workflowUrl: 'http://your-server.com/ai-workflow'
-});
-```
+After registering your webhook, you can use it in your Tunerkit configuration:
 
 ### 3. Use Development Mode
 
