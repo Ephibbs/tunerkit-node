@@ -1,9 +1,12 @@
+import { v4 as uuidv4 } from 'uuid';
 
 type TunerkitHeaders = {
-  'Tunerkit-Session-Id'?: string;
-  'Tunerkit-Session-Path'?: string;
-  'Tunerkit-Session-Name'?: string;
-  'Tunerkit-Record-Id'?: string;
+  'Tunerkit-Session-Id'?: string | undefined;
+  'Tunerkit-Session-Path'?: string | undefined;
+  'Tunerkit-Dataset-Id'?: string | undefined;
+  'Tunerkit-Record-Id'?: string | undefined;
+  'Tunerkit-Session-Type'?: string | undefined;
+  'Tunerkit-Session-Parent-Id'?: string | undefined;
 }
 
 type ToolOptions = {
@@ -15,47 +18,68 @@ export class TunerkitClient<T extends object> {
   private client: T;
   private tunerkitApiKey: string;
   private logger: any;
+  private baseURL: string;
+  private datasetId: string;
+  private sessionType: string;
+  private sessionId: string;
+  private recordId: string;
+  private sessionParentId: string;
+  [key: string]: any; // Add this index signature
 
   constructor({
     client,
     tunerkitApiKey,
-    logger
+    logger,
+    baseURL='https://api.tunerkit.dev'
   }: {
     client: T;
     tunerkitApiKey: string;
     logger?: any;
+    baseURL: string;
   }) {
     this.client = client;
     this.tunerkitApiKey = tunerkitApiKey;
     this.logger = logger;
+    this.baseURL = baseURL;
+    this.sessionType = 'real';
+    this.sessionId = '';
+    this.recordId = '';
+    this.sessionParentId = '';
+    this.datasetId = '';
+    const self = this; // Capture the instance
+
     return new Proxy(this, {
       get: (target, prop) => {
         if (prop in target) {
           return (target as any)[prop];
         }
-        return this.createProxyHandler(prop as string);
+        return self.createProxyHandler(prop as string); // Use 'self' instead of 'this'
       }
     }) as any;
   }
 
-  private async _logToTunerkit(params: any, response: any, headers: TunerkitHeaders) {
+  private async _logToTunerkit(request: any, response: any, timing: any, headers: TunerkitHeaders) {
     try {
-      await fetch('https://api.tunerkit.dev/logs', {
+      const cleanedHeaders = Object.fromEntries(
+        Object.entries(headers).filter(([_, value]) => value !== undefined)
+      );
+
+      await fetch(`${this.baseURL}/api/logs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.tunerkitApiKey}`,
-          ...headers
+          ...cleanedHeaders
         },
-        body: JSON.stringify({ params, response }),
+        body: JSON.stringify({ request, response, timing }),
       });
     } catch (error) {
       console.error('Error logging to Tunerkit:', error);
     }
   }
 
-  private async _runDevFlow(params: any, headers: any, options: any): Promise<{ run_model: boolean; response: any }> {
-    const tunerkitResponse = await fetch('https://api.tunerkit.dev/v1/dev/completions', {
+  private async _runDevFlow(params: any, headers: any): Promise<{ run_model: boolean; response: any }> {
+    const tunerkitResponse = await fetch(`${this.baseURL}/api/completions`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -88,13 +112,25 @@ export class TunerkitClient<T extends object> {
         let devResponse: any = { run_model: true };
 
         if (toolOptions.dev) {
-          devResponse = await this._runDevFlow(params, headers, toolOptions);
+          devResponse = await this._runDevFlow(params, headers);
           response = devResponse.response;
         }
 
         if (devResponse.run_model) {
+          const startTime = Date.now();
           response = await originalMethod.apply(this, args);
-          this._logToTunerkit(params, response, headers);
+          const endTime = Date.now();
+          const timing: Timing = {
+            startTime: {
+              seconds: Math.trunc(startTime / 1000),
+              milliseconds: startTime % 1000,
+            },
+            endTime: {
+              seconds: Math.trunc(endTime / 1000),
+              milliseconds: endTime % 1000,
+            },
+          };
+          this._logToTunerkit(params, response, timing, headers);
         }
 
         if (this.logger) {
@@ -112,34 +148,109 @@ export class TunerkitClient<T extends object> {
     };
   }
 
+  public startSession({ inputs, datasetId, recordId, sessionId, parentId, type='real' }: { inputs: any, datasetId: string, recordId?: string, sessionId?: string, parentId?: string, type?: string }) {
+    recordId = recordId || uuidv4();
+    sessionId = sessionId || uuidv4();
+    this.datasetId = datasetId;
+    this.sessionId = sessionId;
+    this.recordId = recordId;
+    this.sessionType = type;
+    const headers: TunerkitHeaders = {
+      'Tunerkit-Dataset-Id': datasetId,
+      'Tunerkit-Record-Id': recordId,
+      'Tunerkit-Session-Id': sessionId,
+      'Tunerkit-Session-Type': type,
+      'Tunerkit-Session-Parent-Id': parentId
+    };
+
+    const startTime = Date.now();
+
+    this._logToTunerkit({
+      inputs,
+      startTime
+    }, {}, {}, {...headers, 'Tunerkit-Session-Path': '__START__'});
+
+    return headers;
+  }
+
+  public endSession({outputs, headers}: {outputs?: any, headers: TunerkitHeaders}) {
+    const endTime = Date.now();
+    this._logToTunerkit({outputs, endTime}, {}, {}, {...headers, 'Tunerkit-Session-Path': '__END__'});
+  }
+
   private createProxyHandler(propPath: string): any {
+    const self = this; // Capture the instance
     return new Proxy(() => {}, {
-      get: (_, subProp) => this.createProxyHandler(`${propPath}.${String(subProp)}`),
+      get: (_, subProp) => self.createProxyHandler(`${propPath}.${String(subProp)}`),
       apply: async (_, __, args) => {
-        const [params, headers, options] = args;
-        const method = propPath.split('.').reduce((obj: any, prop) => obj[prop], this.client);
+        const [params] = args;
+        const headers = {
+          'Tunerkit-Dataset-Id': self.datasetId,
+          'Tunerkit-Session-Id': self.sessionId,
+          'Tunerkit-Record-Id': self.recordId,
+          'Tunerkit-Session-Type': self.sessionType,
+          'Tunerkit-Session-Parent-Id': self.sessionParentId
+        }
+        console.log("headers", headers);
+        const isDev = self.sessionType === 'test';
+        // Use a type-safe approach to access the method
+        const method = propPath.split('.').reduce<any>((obj, prop) => {
+          if (obj && typeof obj === 'object' && prop in obj) {
+            return obj[prop];
+          }
+          return undefined;
+        }, self.client);
+
+        if (typeof method !== 'function') {
+          throw new Error(`Method ${propPath} not found on client`);
+        }
 
         let response;
         let devResponse: any = {
             run_model: true,
         };
 
-        if (options?.dev) {
-            devResponse = await this._runDevFlow(params, headers, options);
+        const startTime = Date.now();
+
+        if (isDev) {
+            devResponse = await self._runDevFlow(params, headers);
             response = devResponse.response;
         }
 
         if (devResponse.run_model) {
-            response = await method.call(this.client, params);
-            this._logToTunerkit(params, response, headers);
+            const methodParts = propPath.split('.');
+            const methodName = methodParts.pop()!;
+            const methodObject = methodParts.reduce<any>((obj, prop) => obj[prop], self.client);
+            
+            if (typeof methodObject[methodName] !== 'function') {
+              throw new Error(`Method ${propPath} not found on client`);
+            }
+        
+            response = await methodObject[methodName](params);
+            const endTime = Date.now();
+            const timing: Timing = {
+                startTime: {
+                  seconds: Math.trunc(startTime / 1000),
+                  milliseconds: startTime % 1000,
+                },
+                endTime: {
+                  seconds: Math.trunc(endTime / 1000),
+                  milliseconds: endTime % 1000,
+                },
+            };
+            console.log("logging to tunerkit");
+            self._logToTunerkit(params, response, timing, headers);
         }
+        const endTime = Date.now();
 
-        if (this.logger) {
-            this.logger.log({
+        if (self.logger) {
+            self.logger.log({
                 params,
                 response,
                 headers,
-                meta: response.meta
+                meta: response.meta,
+                startTime,
+                endTime
             });
         }
 
@@ -162,19 +273,21 @@ export class HeliconeLogger implements TunerkitLogger {
     params,
     response,
     headers,
-    meta
+    meta,
+    startTime,
+    endTime
   }: {
     params: any;
     response: any;
     headers: any;
     meta?: Record<string, string>;
+    startTime: number;
+    endTime: number;
   }): Promise<void> {
     if (!params) {
       console.error("Request is not registered.");
       return;
     }
-
-    const endTime = Date.now();
 
     try {
       const providerRequest: ProviderRequest = {
@@ -191,8 +304,8 @@ export class HeliconeLogger implements TunerkitLogger {
 
       const timing: Timing = {
         startTime: {
-          seconds: Math.trunc(endTime / 1000),
-          milliseconds: endTime % 1000,
+          seconds: Math.trunc(startTime / 1000),
+          milliseconds: startTime % 1000,
         },
         endTime: {
           seconds: Math.trunc(endTime / 1000),
