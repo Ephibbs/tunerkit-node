@@ -71,7 +71,7 @@ export class TunerkitClient<T extends object> {
           'Authorization': `Bearer ${this.tunerkitApiKey}`,
           ...cleanedHeaders
         },
-        body: JSON.stringify({ request, response, timing }),
+        body: JSON.stringify({ params, response, timing }),
       });
     } catch (error) {
       console.error('Error logging to Tunerkit:', error);
@@ -210,7 +210,8 @@ export class TunerkitClient<T extends object> {
             run_model: true,
         };
 
-        const startTime = Date.now();
+        let startTime = Date.now();
+        let endTime = Date.now();
 
         if (isDev) {
             devResponse = await self._runDevFlow(params, headers);
@@ -226,22 +227,47 @@ export class TunerkitClient<T extends object> {
               throw new Error(`Method ${propPath} not found on client`);
             }
         
-            response = await methodObject[methodName](params);
-            const endTime = Date.now();
-            const timing: Timing = {
-                startTime: {
-                  seconds: Math.trunc(startTime / 1000),
-                  milliseconds: startTime % 1000,
-                },
-                endTime: {
-                  seconds: Math.trunc(endTime / 1000),
-                  milliseconds: endTime % 1000,
-                },
-            };
-            console.log("logging to tunerkit");
-            self._logToTunerkit(params, response, timing, headers);
+            startTime = Date.now();
+            if (params.stream) {
+                const stream = await methodObject[methodName](params);
+                let fullResponse = '';
+                response = await new Promise((resolve) => {
+                    stream.on('data', (chunk: any) => {
+                        fullResponse += chunk.toString();
+                    });
+                    stream.on('end', () => {
+                        endTime = Date.now();
+                        const response = JSON.parse(fullResponse);
+                        resolve(response);
+                        const timing: Timing = {
+                            startTime: {
+                              seconds: Math.trunc(startTime / 1000),
+                              milliseconds: startTime % 1000,
+                            },
+                            endTime: {
+                              seconds: Math.trunc(endTime / 1000),
+                              milliseconds: endTime % 1000,
+                            },
+                        };
+                        self._logToTunerkit(params, response, timing, headers);
+                    });
+                });
+            } else {
+                response = await methodObject[methodName](params);
+                endTime = Date.now();
+                const timing: Timing = {
+                  startTime: {
+                    seconds: Math.trunc(startTime / 1000),
+                    milliseconds: startTime % 1000,
+                  },
+                  endTime: {
+                    seconds: Math.trunc(endTime / 1000),
+                    milliseconds: endTime % 1000,
+                  },
+                };
+                self._logToTunerkit(params, response, timing, headers);
+            }
         }
-        const endTime = Date.now();
 
         if (self.logger) {
             self.logger.log({
