@@ -1,0 +1,57 @@
+// 
+{
+    "session_id": "1234567890",
+    "session_name": "Session 1",
+    "session_path": "path/to/session",
+    "request": {
+        "url": "https://api.tunerkit.dev/v1/extract-snippet-info",
+        "json": {
+            // ...
+        },
+        "meta": {}
+    },
+    "response": {
+        "json": {},
+        "status": 200,
+        "headers": {}
+    },
+    "timing": {
+        "startTime": {
+            "seconds": 1714857600,
+            "milliseconds": 24
+        },
+        "endTime": {
+            "seconds": 1714857600,
+            "milliseconds": 267
+        }
+    }
+}
+
+
+// type ProviderRequest = {
+//     url: string;
+//     json: {
+//       [key: string]: any;
+//     };
+//     meta: Record<string, string>;
+//   };
+  
+//   type ProviderResponse = {
+//     json: {
+//       [key: string]: any;
+//     };
+//     status: number;
+//     headers: Record<string, string>;
+//   };
+  
+
+// type Timing = {
+//     startTime: {
+//       seconds: number;
+//       milliseconds: number;
+//     };
+//     endTime: {
+//       seconds: number;
+//       milliseconds: number;
+//     };
+//   };
