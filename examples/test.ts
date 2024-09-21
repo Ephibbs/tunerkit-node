@@ -49,6 +49,46 @@ async function runTests() {
       messages: [{ role: "user", content: "Hello, how are you?" }],
     });
 
+    // Test 2: Structured output API call (in the same session)
+    try {
+      const structuredResponse = await tunerkitClient.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: "You are a helpful assistant that provides structured output." },
+          { role: "user", content: "Give me a recipe for pancakes in JSON format. Include ingredients and steps." }
+        ],
+        functions: [
+          {
+            name: "provide_recipe",
+            description: "Provides a recipe in a structured format",
+            parameters: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                ingredients: { 
+                  type: "array",
+                  items: { type: "string" }
+                },
+                steps: {
+                  type: "array",
+                  items: { type: "string" }
+                }
+              },
+              required: ["name", "ingredients", "steps"]
+            }
+          }
+        ],
+        function_call: { name: "provide_recipe" }
+      });
+
+      const structuredOutput = JSON.parse(structuredResponse.choices[0].message.function_call?.arguments || '{}');
+      console.log("Test 2 - Structured API call response:", JSON.stringify(structuredOutput, null, 2));
+
+      // We don't end the session here, as we're keeping it in the same session
+    } catch (error) {
+      console.error("Test 2 failed:", error);
+    }
+
     console.log("Test 1 - Basic API call response:", response.choices[0].message.content);
 
     tunerkitClient.endSession({ outputs: response.choices[0].message.content, headers });

@@ -71,7 +71,7 @@ export class TunerkitClient<T extends object> {
           'Authorization': `Bearer ${this.tunerkitApiKey}`,
           ...cleanedHeaders
         },
-        body: JSON.stringify({ params, response, timing }),
+        body: JSON.stringify({ request, response, timing }),
       });
     } catch (error) {
       console.error('Error logging to Tunerkit:', error);
@@ -166,16 +166,32 @@ export class TunerkitClient<T extends object> {
     const startTime = Date.now();
 
     this._logToTunerkit({
-      inputs,
-      startTime
-    }, {}, {}, {...headers, 'Tunerkit-Session-Path': '__START__'});
+      inputs
+    }, {}, {startTime: {
+      seconds: Math.trunc(startTime / 1000),
+      milliseconds: startTime % 1000,
+    },
+    endTime: {
+      seconds: Math.trunc(startTime / 1000),
+      milliseconds: startTime % 1000,
+    }
+  }, {...headers, 'Tunerkit-Session-Path': '__START__'});
 
     return headers;
   }
 
   public endSession({outputs, headers}: {outputs?: any, headers: TunerkitHeaders}) {
     const endTime = Date.now();
-    this._logToTunerkit({outputs, endTime}, {}, {}, {...headers, 'Tunerkit-Session-Path': '__END__'});
+    this._logToTunerkit({outputs}, {}, {
+      startTime: {
+        seconds: Math.trunc(endTime / 1000),
+        milliseconds: endTime % 1000,
+      },
+      endTime: {
+        seconds: Math.trunc(endTime / 1000),
+        milliseconds: endTime % 1000,
+      },
+    }, {...headers, 'Tunerkit-Session-Path': '__END__'});
   }
 
   private createProxyHandler(propPath: string): any {
