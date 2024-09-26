@@ -199,13 +199,14 @@ export class TunerkitClient<T extends object> {
     return new Proxy(() => {}, {
       get: (_, subProp) => self.createProxyHandler(`${propPath}.${String(subProp)}`),
       apply: async (_, __, args) => {
-        const [params] = args;
-        const headers = {
+        const [params, options] = args;
+        let headers = {
           'Tunerkit-Dataset-Id': self.datasetId,
           'Tunerkit-Session-Id': self.sessionId,
           'Tunerkit-Record-Id': self.recordId,
           'Tunerkit-Session-Type': self.sessionType,
-          'Tunerkit-Session-Parent-Id': self.sessionParentId
+          'Tunerkit-Session-Parent-Id': self.sessionParentId,
+          ...options.headers
         }
         console.log("headers", headers);
         const isDev = self.sessionType === 'test';
@@ -245,7 +246,7 @@ export class TunerkitClient<T extends object> {
         
             startTime = Date.now();
             if (params.stream) {
-                const stream = await methodObject[methodName](params);
+                const stream = await methodObject[methodName](params, headers);
                 let fullResponse = '';
                 response = await new Promise((resolve) => {
                     stream.on('data', (chunk: any) => {
