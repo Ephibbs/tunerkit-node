@@ -246,7 +246,7 @@ export class TunerkitClient<T extends object> {
         
             startTime = Date.now();
             if (params.stream) {
-                const stream = await methodObject[methodName](params, headers);
+                const stream = await methodObject[methodName](params, {headers});
                 let fullResponse = '';
                 response = await new Promise((resolve) => {
                     stream.on('data', (chunk: any) => {
@@ -270,7 +270,7 @@ export class TunerkitClient<T extends object> {
                     });
                 });
             } else {
-                response = await methodObject[methodName](params);
+                response = await methodObject[methodName](params, { headers });
                 endTime = Date.now();
                 const timing: Timing = {
                   startTime: {
